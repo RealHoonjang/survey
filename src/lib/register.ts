@@ -112,11 +112,11 @@ export async function registerParticipant(
     }
 
     const updated = await tx.$executeRaw`
-      UPDATE Activity
-      SET currentCount = currentCount + 1
-      WHERE id = ${activityId}
-        AND surveyId = ${surveyId}
-        AND currentCount < maxCapacity
+      UPDATE "Activity"
+      SET "currentCount" = "currentCount" + 1
+      WHERE "id" = ${activityId}
+        AND "surveyId" = ${surveyId}
+        AND "currentCount" < "maxCapacity"
     `;
 
     const rows =

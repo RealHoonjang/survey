@@ -47,3 +47,6 @@ next-env.d.ts
 /dev.db-journal
 
 .vercel
+.env*
+
+vercel_recovery-codes.txt
