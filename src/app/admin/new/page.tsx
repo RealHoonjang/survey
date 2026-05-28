@@ -27,7 +27,7 @@ export default function NewSurveyPage() {
   } | null>(null);
 
   const [title, setTitle] = useState("");
-  const [totalStudents, setTotalStudents] = useState(30);
+  const [totalStudents, setTotalStudents] = useState("30");
   const [authType, setAuthType] = useState<"CODE" | "STUDENT_ID">("CODE");
   const [allowDuplicate, setAllowDuplicate] = useState(false);
   const [startTime, setStartTime] = useState(() =>
@@ -60,17 +60,33 @@ export default function NewSurveyPage() {
     setLoading(true);
 
     try {
+      const parsedTotalStudents = Number(totalStudents);
+      if (!Number.isInteger(parsedTotalStudents) || parsedTotalStudents < 1) {
+        throw new Error("총 대상 학생 수는 1명 이상 정수여야 합니다.");
+      }
+
+      const filledActivities = activities.filter((a) => a.name.trim());
+      const capacitySum = filledActivities.reduce(
+        (sum, activity) => sum + activity.maxCapacity,
+        0,
+      );
+      if (capacitySum !== parsedTotalStudents) {
+        throw new Error(
+          `총 대상 학생 수(${parsedTotalStudents})와 활동 정원 합(${capacitySum})이 일치하지 않습니다.`,
+        );
+      }
+
       const res = await fetch("/api/surveys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title,
-          totalStudents,
+          totalStudents: parsedTotalStudents,
           authType,
           allowDuplicate,
           startTime: new Date(startTime).toISOString(),
           endTime: new Date(endTime).toISOString(),
-          activities: activities.filter((a) => a.name.trim()),
+          activities: filledActivities,
         }),
       });
       const data = await res.json();
@@ -164,7 +180,8 @@ export default function NewSurveyPage() {
                 type="number"
                 min={1}
                 value={totalStudents}
-                onChange={(e) => setTotalStudents(Number(e.target.value))}
+                onChange={(e) => setTotalStudents(e.target.value)}
+                placeholder="예: 14"
                 required
               />
             </div>

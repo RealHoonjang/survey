@@ -61,6 +61,35 @@ export async function POST(request: Request) {
     return jsonError("최소 1개의 활동을 등록해 주세요.");
   }
 
+  const normalizedActivities = activities
+    .filter((a) => a.name?.trim())
+    .map((a) => ({
+      name: a.name.trim(),
+      description: (a.description ?? "").trim(),
+      maxCapacity: Number(a.maxCapacity),
+    }));
+
+  if (normalizedActivities.length === 0) {
+    return jsonError("최소 1개의 활동을 등록해 주세요.");
+  }
+
+  const hasInvalidCapacity = normalizedActivities.some(
+    (a) => !Number.isInteger(a.maxCapacity) || a.maxCapacity < 1,
+  );
+  if (hasInvalidCapacity) {
+    return jsonError("각 활동 정원은 1명 이상 정수여야 합니다.");
+  }
+
+  const capacitySum = normalizedActivities.reduce(
+    (sum, activity) => sum + activity.maxCapacity,
+    0,
+  );
+  if (capacitySum !== totalStudents) {
+    return jsonError(
+      `총 대상 학생 수(${totalStudents})와 활동 정원 합(${capacitySum})이 일치하지 않습니다.`,
+    );
+  }
+
   const adminToken = adminTokenGen();
   const adminTokenHash = await hashAdminToken(adminToken);
 
@@ -74,11 +103,7 @@ export async function POST(request: Request) {
       endTime: end,
       adminTokenHash,
       activities: {
-        create: activities.map((a) => ({
-          name: a.name.trim(),
-          description: (a.description ?? "").trim(),
-          maxCapacity: a.maxCapacity,
-        })),
+        create: normalizedActivities,
       },
     },
     include: { activities: true },
