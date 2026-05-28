@@ -21,7 +21,7 @@
 
 - **Frontend**: Next.js 16, React 19, Tailwind CSS 4
 - **Backend**: Next.js API Routes
-- **Database**: SQLite (Prisma ORM) — 운영 시 PostgreSQL로 전환 가능
+- **Database**: PostgreSQL (Prisma ORM)
 - **실시간**: Server-Sent Events (SSE)
 - **엑셀**: ExcelJS
 
@@ -29,7 +29,6 @@
 
 ```bash
 npm install
-npm run db:migrate
 npm run dev
 ```
 
@@ -74,4 +73,12 @@ WHERE id = ? AND currentCount < maxCapacity
 
 ## PostgreSQL로 전환
 
-`prisma/schema.prisma`의 `provider`를 `postgresql`로 변경하고 `.env`의 `DATABASE_URL`을 설정한 뒤 `npm run db:migrate`를 실행하세요.
+1. PostgreSQL 연결 문자열을 준비합니다. (Neon/Supabase/Railway 권장)
+2. `.env` 또는 Vercel 환경변수에 `DATABASE_URL`을 설정합니다.
+3. DB 스키마를 반영합니다.
+
+```bash
+npm run db:deploy
+```
+
+Vercel 배포 시에도 `DATABASE_URL`이 반드시 설정되어야 하며, 설정 후 재배포하면 정상 동작합니다.
