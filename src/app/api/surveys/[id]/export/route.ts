@@ -55,6 +55,8 @@ export async function GET(request: Request, { params }: Params) {
           { header: "번호", key: "no", width: 8 },
           { header: "활동명", key: "activity", width: 24 },
           { header: "코드", key: "auth", width: 20 },
+          { header: "학번", key: "studentId", width: 16 },
+          { header: "이름", key: "studentName", width: 16 },
           { header: "참여시각", key: "time", width: 24 },
         ]
       : [
@@ -71,6 +73,8 @@ export async function GET(request: Request, { params }: Params) {
         no: i + 1,
         activity: p.activity.name,
         auth: p.authValue,
+        studentId: p.studentId ?? "",
+        studentName: p.studentName ?? "",
         time: p.createdAt.toLocaleString("ko-KR"),
       });
       return;

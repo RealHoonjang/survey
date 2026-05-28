@@ -41,27 +41,31 @@ model Activity {
 }
 
 model AccessCode {
-  id       String    @id @default(cuid())
-  surveyId String
-  survey   Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  code     String
-  used     Boolean   @default(false)
-  usedAt   DateTime?
+  id           String    @id @default(cuid())
+  surveyId     String
+  survey       Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  code         String
+  studentId    String?
+  studentName  String?
+  profileJson  Json?
+  used         Boolean   @default(false)
+  usedAt       DateTime?
 
   @@unique([surveyId, code])
   @@index([surveyId])
 }
 
 model Participant {
-  id         String   @id @default(cuid())
-  surveyId   String
-  survey     Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  activityId String
-  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  authValue  String
-  studentId  String?
-  studentName String?
-  createdAt  DateTime @default(now())
+  id           String   @id @default(cuid())
+  surveyId     String
+  survey       Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  activityId   String
+  activity     Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  authValue    String
+  studentId    String?
+  studentName  String?
+  profileJson  Json?
+  createdAt    DateTime @default(now())
 
   @@index([surveyId])
   @@index([activityId])

@@ -236,7 +236,11 @@ export default function AdminDashboardPage() {
                 <th className="px-4 py-3 font-medium">시각</th>
                 <th className="px-4 py-3 font-medium">활동</th>
                 {survey.authType === "CODE" ? (
-                  <th className="px-4 py-3 font-medium">코드</th>
+                  <>
+                    <th className="px-4 py-3 font-medium">코드</th>
+                    <th className="px-4 py-3 font-medium">학번</th>
+                    <th className="px-4 py-3 font-medium">이름</th>
+                  </>
                 ) : (
                   <>
                     <th className="px-4 py-3 font-medium">학번</th>
@@ -249,7 +253,7 @@ export default function AdminDashboardPage() {
               {survey.participants.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={survey.authType === "CODE" ? 3 : 4}
+                    colSpan={survey.authType === "CODE" ? 5 : 4}
                     className="px-4 py-8 text-center text-slate-400"
                   >
                     아직 참여자가 없습니다.
@@ -263,7 +267,11 @@ export default function AdminDashboardPage() {
                     </td>
                     <td className="px-4 py-3">{p.activity.name}</td>
                     {survey.authType === "CODE" ? (
-                      <td className="px-4 py-3 font-mono">{p.authValue}</td>
+                      <>
+                        <td className="px-4 py-3 font-mono">{p.authValue}</td>
+                        <td className="px-4 py-3 font-mono">{p.studentId ?? "-"}</td>
+                        <td className="px-4 py-3">{p.studentName ?? "-"}</td>
+                      </>
                     ) : (
                       <>
                         <td className="px-4 py-3 font-mono">

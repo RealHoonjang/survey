@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     startTime?: string;
     endTime?: string;
     activities?: { name: string; description?: string; maxCapacity: number }[];
+    rosterRows?: Array<Record<string, string>>;
   };
 
   try {
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
     startTime,
     endTime,
     activities = [],
+    rosterRows = [],
   } = body;
 
   if (!title?.trim()) return jsonError("조사 명칭을 입력해 주세요.");
@@ -90,6 +92,28 @@ export async function POST(request: Request) {
     );
   }
 
+  const normalizedRosterRows = rosterRows
+    .map((row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [key.trim(), (value ?? "").trim()]),
+      ),
+    )
+    .filter((row) => Object.values(row).some((value) => value));
+
+  if (authType === "CODE" && normalizedRosterRows.length > 0) {
+    if (normalizedRosterRows.length !== totalStudents) {
+      return jsonError(
+        `명단 인원(${normalizedRosterRows.length})과 총 대상 학생 수(${totalStudents})가 일치하지 않습니다.`,
+      );
+    }
+    const missingCore = normalizedRosterRows.find(
+      (row) => !row["학번"] || !row["이름"],
+    );
+    if (missingCore) {
+      return jsonError("명단 엑셀에는 '학번'과 '이름' 열이 모두 필요합니다.");
+    }
+  }
+
   const adminToken = adminTokenGen();
   const adminTokenHash = await hashAdminToken(adminToken);
 
@@ -111,9 +135,21 @@ export async function POST(request: Request) {
 
   if (authType === "CODE") {
     const codes = generateAccessCodes(totalStudents);
-    await prisma.accessCode.createMany({
-      data: codes.map((code) => ({ surveyId: survey.id, code })),
-    });
+    if (normalizedRosterRows.length > 0) {
+      await prisma.accessCode.createMany({
+        data: codes.map((code, index) => ({
+          surveyId: survey.id,
+          code,
+          studentId: normalizedRosterRows[index]?.["학번"] ?? null,
+          studentName: normalizedRosterRows[index]?.["이름"] ?? null,
+          profileJson: normalizedRosterRows[index] ?? null,
+        })),
+      });
+    } else {
+      await prisma.accessCode.createMany({
+        data: codes.map((code) => ({ surveyId: survey.id, code })),
+      });
+    }
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge, Button, Card, Input, Label, Textarea } from "@/components/ui";
+import * as XLSX from "xlsx";
 
 type ActivityDraft = {
   name: string;
@@ -39,6 +40,8 @@ export default function NewSurveyPage() {
   const [activities, setActivities] = useState<ActivityDraft[]>([
     { name: "", description: "", maxCapacity: 10 },
   ]);
+  const [rosterRows, setRosterRows] = useState<Array<Record<string, string>>>([]);
+  const [rosterFileName, setRosterFileName] = useState("");
 
   const addActivity = () =>
     setActivities([...activities, { name: "", description: "", maxCapacity: 10 }]);
@@ -75,6 +78,13 @@ export default function NewSurveyPage() {
           `총 대상 학생 수(${parsedTotalStudents})와 활동 정원 합(${capacitySum})이 일치하지 않습니다.`,
         );
       }
+      if (authType === "CODE" && rosterRows.length > 0) {
+        if (rosterRows.length !== parsedTotalStudents) {
+          throw new Error(
+            `명단 인원(${rosterRows.length})과 총 대상 학생 수(${parsedTotalStudents})가 일치하지 않습니다.`,
+          );
+        }
+      }
 
       const res = await fetch("/api/surveys", {
         method: "POST",
@@ -87,6 +97,7 @@ export default function NewSurveyPage() {
           startTime: new Date(startTime).toISOString(),
           endTime: new Date(endTime).toISOString(),
           activities: filledActivities,
+          rosterRows: authType === "CODE" ? rosterRows : [],
         }),
       });
       const data = await res.json();
@@ -115,6 +126,60 @@ export default function NewSurveyPage() {
       setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRosterFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setRosterRows([]);
+      setRosterFileName("");
+      return;
+    }
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) throw new Error("엑셀 시트를 찾을 수 없습니다.");
+      const sheet = workbook.Sheets[firstSheetName];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+        defval: "",
+      });
+
+      const normalizedRows = rows
+        .map((row) =>
+          Object.fromEntries(
+            Object.entries(row).map(([k, v]) => [k.trim(), String(v ?? "").trim()]),
+          ),
+        )
+        .filter((row) => Object.values(row).some((value) => value));
+
+      if (normalizedRows.length === 0) {
+        throw new Error("엑셀 명단에 데이터가 없습니다.");
+      }
+
+      const hasRequiredColumns = normalizedRows.every(
+        (row) => row["학번"] && row["이름"],
+      );
+      if (!hasRequiredColumns) {
+        throw new Error("엑셀에는 '학번'과 '이름' 열이 필요합니다.");
+      }
+
+      setRosterRows(normalizedRows);
+      setRosterFileName(file.name);
+      setTotalStudents(String(normalizedRows.length));
+      setError("");
+    } catch (error) {
+      setRosterRows([]);
+      setRosterFileName("");
+      setError(
+        error instanceof Error
+          ? error.message
+          : "엑셀 파일을 읽는 중 오류가 발생했습니다.",
+      );
     }
   };
 
@@ -218,6 +283,25 @@ export default function NewSurveyPage() {
                 </label>
               </div>
             </div>
+            {authType === "CODE" && (
+              <div>
+                <Label>학생 명단 엑셀 (선택)</Label>
+                <Input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleRosterFileChange}
+                />
+                <p className="mt-2 text-xs text-slate-500">
+                  '학번', '이름' 열이 포함된 엑셀을 업로드하면 학생별 랜덤 코드가
+                  생성되어 코드 다운로드 파일에 함께 제공됩니다.
+                </p>
+                {rosterFileName && (
+                  <p className="mt-1 text-xs text-indigo-600">
+                    {rosterFileName} ({rosterRows.length}명 로드됨)
+                  </p>
+                )}
+              </div>
+            )}
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

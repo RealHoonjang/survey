@@ -1,4 +1,4 @@
-import { AuthType } from "@/generated/prisma/client";
+import { AuthType, Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSurveyPhase } from "@/lib/survey-status";
 
@@ -84,6 +84,15 @@ export async function registerParticipant(
   }
 
   return prisma.$transaction(async (tx) => {
+    let matchedCode:
+      | {
+          studentId: string | null;
+          studentName: string | null;
+          profileJson: unknown;
+          used: boolean;
+        }
+      | null = null;
+
     if (!survey.allowDuplicate) {
       const dup = await findDuplicateParticipant(
         surveyId,
@@ -102,6 +111,12 @@ export async function registerParticipant(
     if (survey.authType === AuthType.CODE) {
       const code = await tx.accessCode.findFirst({
         where: { surveyId, code: normalizedAuth },
+        select: {
+          studentId: true,
+          studentName: true,
+          profileJson: true,
+          used: true,
+        },
       });
       if (!code) {
         throw new RegisterError("유효하지 않은 코드입니다.", "INVALID_AUTH");
@@ -109,6 +124,7 @@ export async function registerParticipant(
       if (!survey.allowDuplicate && code.used) {
         throw new RegisterError("이미 사용된 코드입니다.", "CODE_USED");
       }
+      matchedCode = code;
     }
 
     const updated = await tx.$executeRaw`
@@ -128,16 +144,26 @@ export async function registerParticipant(
       throw new RegisterError("정원이 마감되었습니다.", "FULL");
     }
 
+    const participantData: Prisma.ParticipantUncheckedCreateInput = {
+      surveyId,
+      activityId,
+      authValue: normalizedAuth,
+    };
+
+    if (survey.authType === AuthType.STUDENT_ID) {
+      participantData.studentId = normalizedAuth;
+      participantData.studentName = studentName;
+    } else {
+      participantData.studentId = matchedCode?.studentId ?? null;
+      participantData.studentName = matchedCode?.studentName ?? null;
+      if (matchedCode?.profileJson !== undefined && matchedCode.profileJson !== null) {
+        participantData.profileJson =
+          matchedCode.profileJson as Prisma.InputJsonValue;
+      }
+    }
+
     const participant = await tx.participant.create({
-      data: {
-        surveyId,
-        activityId,
-        authValue: normalizedAuth,
-        ...(survey.authType === AuthType.STUDENT_ID && {
-          studentId: normalizedAuth,
-          studentName,
-        }),
-      },
+      data: participantData,
     });
 
     if (survey.authType === AuthType.CODE && !survey.allowDuplicate) {
