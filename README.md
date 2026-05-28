@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 학생 활동 선착순 조사 시스템
 
-## Getting Started
+학교 현장에서 교사가 활동별 정원을 설정하고, 학생이 선착순으로 참여 활동을 신청하는 웹 애플리케이션입니다.
 
-First, run the development server:
+## 주요 기능
+
+### 교사 (관리자)
+- 조사 생성: 명칭, 대상 학생 수, 인증 방식(랜덤 코드 / 학번), 중복 참여 허용, 일정
+- 활동 관리: 활동명, 설명, 정원
+- 실시간 대시보드: 활동별 신청·잔여 인원 (SSE, 2초 간격)
+- 참여자 명단 및 엑셀(.xlsx)보내기
+- 코드 모드 시 참여 코드 목록 다운로드
+
+### 학생
+- 코드 또는 학번으로 인증
+- 시작 전/종료 후 안내 메시지
+- 활동 선택 (정원 마감 시 선택 불가)
+- 선착순 정원 처리 (DB 트랜잭션 + 조건부 UPDATE)
+
+## 기술 스택
+
+- **Frontend**: Next.js 16, React 19, Tailwind CSS 4
+- **Backend**: Next.js API Routes
+- **Database**: SQLite (Prisma ORM) — 운영 시 PostgreSQL로 전환 가능
+- **실시간**: Server-Sent Events (SSE)
+- **엑셀**: ExcelJS
+
+## 시작하기
 
 ```bash
+npm install
+npm run db:migrate
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 [http://localhost:3000](http://localhost:3000) 접속
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **교사**: 「새 조사 만들기」 → 설정 후 생성 → 표시되는 **관리 링크** 저장
+2. **학생**: 관리 대시보드의 「학생 링크 복사」로 배포
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+> 생성 시 표시되는 관리자 토큰이 포함된 URL을 잃어버리면 대시보드에 다시 접속할 수 없습니다. 북마크하세요.
 
-## Learn More
+## API 개요
 
-To learn more about Next.js, take a look at the following resources:
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/surveys` | 조사 생성 |
+| GET | `/api/surveys/:id` | 조사 조회 (학생용 공개 정보) |
+| GET | `/api/surveys/:id?token=` | 조사 조회 (교사, 참여자 포함) |
+| POST | `/api/surveys/:id/register` | 활동 신청 |
+| GET | `/api/surveys/:id/stream` | 실시간 현황 SSE |
+| GET | `/api/surveys/:id/export?token=` | 엑셀 다운로드 |
+| GET | `/api/surveys/:id/codes?token=` | 코드 목록 (txt) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+교사 API는 쿼리 `token` 또는 헤더 `x-admin-token`으로 인증합니다.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 데이터 모델
 
-## Deploy on Vercel
+- **Survey**: 조사 설정, 일정, 인증 방식
+- **Activity**: 활동별 정원 및 현재 인원
+- **AccessCode**: 코드 모드 시 발급 코드
+- **Participant**: 참여 기록
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 선착순 정합성
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+동시 다발 신청 시 정원 초과를 막기 위해, 트랜잭션 내에서 다음 SQL로 원자적 증가를 수행합니다.
+
+```sql
+UPDATE Activity SET currentCount = currentCount + 1
+WHERE id = ? AND currentCount < maxCapacity
+```
+
+영향 받은 행이 0이면 정원 마감으로 처리합니다.
+
+## PostgreSQL로 전환
+
+`prisma/schema.prisma`의 `provider`를 `postgresql`로 변경하고 `.env`의 `DATABASE_URL`을 설정한 뒤 `npm run db:migrate`를 실행하세요.

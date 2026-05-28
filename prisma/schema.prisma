@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum AuthType {
+  CODE
+  STUDENT_ID
+}
+
+model Survey {
+  id              String        @id @default(cuid())
+  title           String
+  totalStudents   Int
+  authType        AuthType
+  allowDuplicate  Boolean       @default(false)
+  startTime       DateTime
+  endTime         DateTime
+  adminTokenHash  String
+  createdAt       DateTime      @default(now())
+  activities      Activity[]
+  participants    Participant[]
+  accessCodes     AccessCode[]
+}
+
+model Activity {
+  id           String        @id @default(cuid())
+  surveyId     String
+  survey       Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  name         String
+  description  String        @default("")
+  maxCapacity  Int
+  currentCount Int           @default(0)
+  participants Participant[]
+
+  @@index([surveyId])
+}
+
+model AccessCode {
+  id       String    @id @default(cuid())
+  surveyId String
+  survey   Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  code     String
+  used     Boolean   @default(false)
+  usedAt   DateTime?
+
+  @@unique([surveyId, code])
+  @@index([surveyId])
+}
+
+model Participant {
+  id         String   @id @default(cuid())
+  surveyId   String
+  survey     Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  authValue  String
+  studentId  String?
+  studentName String?
+  createdAt  DateTime @default(now())
+
+  @@index([surveyId])
+  @@index([activityId])
+  @@index([surveyId, authValue])
+}
