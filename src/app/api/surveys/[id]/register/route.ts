@@ -19,7 +19,8 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   try {
-    const { activity } = await registerParticipant(
+    const { activity, selectedCount, selectionRequired, selectionMode, isComplete, selectedActivities } =
+      await registerParticipant(
       surveyId,
       activityId,
       {
@@ -29,13 +30,18 @@ export async function POST(request: Request, { params }: Params) {
       },
     );
     return jsonOk({
-      message: "신청이 완료되었습니다.",
+      message: isComplete ? "신청이 완료되었습니다." : "프로그램이 선택되었습니다.",
       activity: {
         id: activity.id,
         name: activity.name,
         currentCount: activity.currentCount,
         maxCapacity: activity.maxCapacity,
       },
+      selectedCount,
+      selectionRequired,
+      selectionMode,
+      isComplete,
+      selectedActivities,
     });
   } catch (e) {
     if (e instanceof RegisterError) {
@@ -46,7 +52,9 @@ export async function POST(request: Request, { params }: Params) {
             ? 403
             : e.code === "FULL"
               ? 409
-              : 400;
+              : e.code === "SELECTION_LIMIT" || e.code === "CODE_USED"
+                ? 409
+                : 400;
       return jsonError(e.message, status);
     }
     console.error(e);

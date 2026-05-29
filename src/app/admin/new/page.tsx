@@ -31,6 +31,8 @@ export default function NewSurveyPage() {
   const [totalStudents, setTotalStudents] = useState("30");
   const [authType, setAuthType] = useState<"CODE" | "STUDENT_ID">("CODE");
   const [allowDuplicate, setAllowDuplicate] = useState(false);
+  const [selectionMode, setSelectionMode] = useState<"EXACT" | "UNLIMITED">("EXACT");
+  const [selectionCount, setSelectionCount] = useState("1");
   const [startTime, setStartTime] = useState(() =>
     toLocalInputValue(new Date(Date.now() + 3600000)),
   );
@@ -68,14 +70,29 @@ export default function NewSurveyPage() {
         throw new Error("총 대상 학생 수는 1명 이상 정수여야 합니다.");
       }
 
+      const parsedSelectionCount = Number(selectionCount);
+      if (
+        selectionMode === "EXACT" &&
+        (!Number.isInteger(parsedSelectionCount) || parsedSelectionCount < 1)
+      ) {
+        throw new Error("선택 개수는 1개 이상 정수여야 합니다.");
+      }
+
       const filledActivities = activities.filter((a) => a.name.trim());
       const capacitySum = filledActivities.reduce(
         (sum, activity) => sum + activity.maxCapacity,
         0,
       );
-      if (capacitySum !== parsedTotalStudents) {
+      if (selectionMode === "EXACT") {
+        const requiredCapacity = parsedTotalStudents * parsedSelectionCount;
+        if (capacitySum !== requiredCapacity) {
+          throw new Error(
+            `활동 정원 합(${capacitySum})은 총 대상 학생 수(${parsedTotalStudents}) × 선택 개수(${parsedSelectionCount}) = ${requiredCapacity}와 일치해야 합니다.`,
+          );
+        }
+      } else if (capacitySum < parsedTotalStudents) {
         throw new Error(
-          `총 대상 학생 수(${parsedTotalStudents})와 활동 정원 합(${capacitySum})이 일치하지 않습니다.`,
+          `자유 선택 모드에서는 활동 정원 합(${capacitySum})이 총 대상 학생 수(${parsedTotalStudents}) 이상이어야 합니다.`,
         );
       }
       if (authType === "CODE" && rosterRows.length > 0) {
@@ -94,6 +111,9 @@ export default function NewSurveyPage() {
           totalStudents: parsedTotalStudents,
           authType,
           allowDuplicate,
+          selectionMode,
+          selectionCount:
+            selectionMode === "EXACT" ? parsedSelectionCount : 1,
           startTime: new Date(startTime).toISOString(),
           endTime: new Date(endTime).toISOString(),
           activities: filledActivities,
@@ -302,6 +322,56 @@ export default function NewSurveyPage() {
                 )}
               </div>
             )}
+            <div>
+              <Label>프로그램 선택 방식</Label>
+              <div className="mt-2 flex flex-col gap-2">
+                <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-3 has-checked:border-indigo-500 has-checked:bg-indigo-50">
+                  <input
+                    type="radio"
+                    name="selectionMode"
+                    className="mt-1"
+                    checked={selectionMode === "EXACT"}
+                    onChange={() => setSelectionMode("EXACT")}
+                  />
+                  <span className="text-sm">
+                    <strong>정확히 N개 선택</strong>
+                    <br />
+                    <span className="text-slate-500">
+                      학생이 지정한 개수만큼 모두 선택해야 완료됩니다.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-3 has-checked:border-indigo-500 has-checked:bg-indigo-50">
+                  <input
+                    type="radio"
+                    name="selectionMode"
+                    className="mt-1"
+                    checked={selectionMode === "UNLIMITED"}
+                    onChange={() => setSelectionMode("UNLIMITED")}
+                  />
+                  <span className="text-sm">
+                    <strong>원하는 만큼 선택</strong>
+                    <br />
+                    <span className="text-slate-500">
+                      학생이 원하는 프로그램을 고른 뒤 직접 완료합니다.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              {selectionMode === "EXACT" && (
+                <div className="mt-3">
+                  <Label>학생 1인당 선택 개수</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={selectionCount}
+                    onChange={(e) => setSelectionCount(e.target.value)}
+                    placeholder="예: 2"
+                    required
+                  />
+                </div>
+              )}
+            </div>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

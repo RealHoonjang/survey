@@ -12,19 +12,38 @@ enum AuthType {
   STUDENT_ID
 }
 
+enum SelectionMode {
+  EXACT
+  UNLIMITED
+}
+
 model Survey {
-  id              String        @id @default(cuid())
+  id              String             @id @default(cuid())
   title           String
   totalStudents   Int
   authType        AuthType
-  allowDuplicate  Boolean       @default(false)
+  allowDuplicate  Boolean            @default(false)
+  selectionMode   SelectionMode      @default(EXACT)
+  selectionCount  Int                @default(1)
   startTime       DateTime
   endTime         DateTime
   adminTokenHash  String
-  createdAt       DateTime      @default(now())
+  createdAt       DateTime           @default(now())
   activities      Activity[]
   participants    Participant[]
   accessCodes     AccessCode[]
+  completions     SurveyCompletion[]
+}
+
+model SurveyCompletion {
+  id          String   @id @default(cuid())
+  surveyId    String
+  survey      Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  authValue   String
+  completedAt DateTime @default(now())
+
+  @@unique([surveyId, authValue])
+  @@index([surveyId])
 }
 
 model Activity {

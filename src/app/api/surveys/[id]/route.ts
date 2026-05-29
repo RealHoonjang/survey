@@ -47,6 +47,8 @@ export async function GET(request: Request, { params }: Params) {
     id: survey.id,
     title: survey.title,
     authType: survey.authType,
+    selectionMode: survey.selectionMode,
+    selectionCount: survey.selectionCount,
     phase,
     startTime: survey.startTime,
     endTime: survey.endTime,

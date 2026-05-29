@@ -35,6 +35,9 @@ export default function HomePage() {
       <p className="mt-8 text-sm text-slate-500">
         학생은 교사가 안내한 조사 링크로 접속합니다.
       </p>
+      <p className="mt-6 text-xs tracking-widest text-slate-400 uppercase">
+        MADE BY 훈장님
+      </p>
     </main>
   );
 }

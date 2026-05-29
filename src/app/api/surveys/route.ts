@@ -1,4 +1,4 @@
-import { AuthType } from "@/generated/prisma/client";
+import { AuthType, SelectionMode } from "@/generated/prisma/client";
 import { jsonError, jsonOk } from "@/lib/api";
 import { hashAdminToken } from "@/lib/auth";
 import { generateAccessCodes } from "@/lib/codes";
@@ -20,6 +20,8 @@ export async function POST(request: Request) {
     endTime?: string;
     activities?: { name: string; description?: string; maxCapacity: number }[];
     rosterRows?: Array<Record<string, string>>;
+    selectionMode?: "EXACT" | "UNLIMITED";
+    selectionCount?: number;
   };
 
   try {
@@ -37,6 +39,8 @@ export async function POST(request: Request) {
     endTime,
     activities = [],
     rosterRows = [],
+    selectionMode = "EXACT",
+    selectionCount = 1,
   } = body;
 
   if (!title?.trim()) return jsonError("조사 명칭을 입력해 주세요.");
@@ -48,6 +52,18 @@ export async function POST(request: Request) {
   }
   if (!startTime || !endTime) {
     return jsonError("시작·종료 시간을 설정해 주세요.");
+  }
+
+  if (!["EXACT", "UNLIMITED"].includes(selectionMode)) {
+    return jsonError("프로그램 선택 방식을 선택해 주세요.");
+  }
+
+  const parsedSelectionCount = Number(selectionCount);
+  if (
+    selectionMode === "EXACT" &&
+    (!Number.isInteger(parsedSelectionCount) || parsedSelectionCount < 1)
+  ) {
+    return jsonError("선택 개수는 1개 이상 정수여야 합니다.");
   }
 
   const start = new Date(startTime);
@@ -86,9 +102,17 @@ export async function POST(request: Request) {
     (sum, activity) => sum + activity.maxCapacity,
     0,
   );
-  if (capacitySum !== totalStudents) {
+
+  if (selectionMode === "EXACT") {
+    const requiredCapacity = totalStudents * parsedSelectionCount;
+    if (capacitySum !== requiredCapacity) {
+      return jsonError(
+        `활동 정원 합(${capacitySum})은 총 대상 학생 수(${totalStudents}) × 선택 개수(${parsedSelectionCount}) = ${requiredCapacity}와 일치해야 합니다.`,
+      );
+    }
+  } else if (capacitySum < totalStudents) {
     return jsonError(
-      `총 대상 학생 수(${totalStudents})와 활동 정원 합(${capacitySum})이 일치하지 않습니다.`,
+      `자유 선택 모드에서는 활동 정원 합(${capacitySum})이 총 대상 학생 수(${totalStudents}) 이상이어야 합니다.`,
     );
   }
 
@@ -123,6 +147,9 @@ export async function POST(request: Request) {
       totalStudents,
       authType: authType as AuthType,
       allowDuplicate,
+      selectionMode: selectionMode as SelectionMode,
+      selectionCount:
+        selectionMode === "EXACT" ? parsedSelectionCount : 1,
       startTime: start,
       endTime: end,
       adminTokenHash,
