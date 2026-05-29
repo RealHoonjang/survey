@@ -23,6 +23,8 @@ type SurveyPublic = {
   }[];
 };
 
+type RegisteredActivity = { id: string; name: string };
+
 type Step = "auth" | "select" | "done";
 
 export default function StudentSurveyPage() {
@@ -32,13 +34,12 @@ export default function StudentSurveyPage() {
   const [authValue, setAuthValue] = useState("");
   const [studentName, setStudentName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState<string | null>(null);
-  const [completing, setCompleting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [selectedActivityIds, setSelectedActivityIds] = useState<string[]>([]);
-  const [selectedActivityNames, setSelectedActivityNames] = useState<string[]>(
-    [],
-  );
+  const [pendingIds, setPendingIds] = useState<string[]>([]);
+  const [registeredActivities, setRegisteredActivities] = useState<
+    RegisteredActivity[]
+  >([]);
 
   const { activities: liveActivities } = useSurveyStream(
     id,
@@ -106,56 +107,109 @@ export default function StudentSurveyPage() {
       return;
     }
     setError("");
-    setSelectedActivityIds([]);
-    setSelectedActivityNames([]);
+    setPendingIds([]);
+    setRegisteredActivities([]);
     setStep("select");
   };
 
-  const register = async (activityId: string) => {
-    setSubmitting(activityId);
+  const registeredIds = registeredActivities.map((a) => a.id);
+  const registeredCount = registeredActivities.length;
+
+  const requiredCount =
+    survey?.selectionMode === "EXACT" ? survey.selectionCount : null;
+
+  const remainingToPick =
+    requiredCount !== null ? Math.max(0, requiredCount - registeredCount) : null;
+
+  const toggleActivity = (activityId: string) => {
+    if (registeredIds.includes(activityId)) return;
+
+    setPendingIds((prev) => {
+      if (prev.includes(activityId)) {
+        return prev.filter((id) => id !== activityId);
+      }
+      if (
+        requiredCount !== null &&
+        registeredCount + prev.length >= requiredCount
+      ) {
+        return prev;
+      }
+      return [...prev, activityId];
+    });
+    setError("");
+  };
+
+  const canSubmit = () => {
+    if (pendingIds.length === 0) return false;
+    if (requiredCount !== null) {
+      return registeredCount + pendingIds.length === requiredCount;
+    }
+    return true;
+  };
+
+  const submitRegistration = async () => {
+    if (!canSubmit()) return;
+
+    setSubmitting(true);
     setError("");
     try {
-      const res = await fetch(`/api/surveys/${id}/register`, {
+      const res = await fetch(`/api/surveys/${id}/register-batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activityId, ...authPayload() }),
+        body: JSON.stringify({ activityIds: pendingIds, ...authPayload() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "신청 실패");
 
-      setSelectedActivityIds((prev) =>
-        prev.includes(activityId) ? prev : [...prev, activityId],
+      const succeeded: RegisteredActivity[] = data.succeeded ?? [];
+      const failed: { id: string; name: string; message: string }[] =
+        data.failed ?? [];
+
+      setRegisteredActivities((prev) => {
+        const map = new Map(prev.map((a) => [a.id, a]));
+        for (const item of succeeded) {
+          map.set(item.id, item);
+        }
+        for (const item of data.selectedActivities ?? []) {
+          map.set(item.id, item);
+        }
+        return Array.from(map.values());
+      });
+
+      setPendingIds((prev) =>
+        prev.filter(
+          (id) => !succeeded.some((s: RegisteredActivity) => s.id === id),
+        ),
       );
-      setSelectedActivityNames(data.selectedActivities ?? []);
+
+      await loadSurvey();
 
       if (data.isComplete) {
+        setRegisteredActivities(
+          (data.selectedActivities as RegisteredActivity[]) ??
+            registeredActivities,
+        );
         setStep("done");
+        return;
+      }
+
+      if (failed.length > 0) {
+        const failedNames = failed.map((f) => f.name).join(", ");
+        const needMore =
+          requiredCount !== null
+            ? Math.max(0, requiredCount - (data.selectedCount ?? 0))
+            : 0;
+        setError(
+          needMore > 0
+            ? `${failedNames}은(는) 정원이 마감되어 신청되지 않았습니다. 다른 프로그램을 ${needMore}개 더 선택한 뒤 신청해 주세요.`
+            : `${failedNames}은(는) 정원이 마감되어 신청되지 않았습니다. 다른 프로그램을 선택해 주세요.`,
+        );
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "오류");
       await loadSurvey();
     } finally {
-      setSubmitting(null);
-    }
-  };
-
-  const finishSelection = async () => {
-    setCompleting(true);
-    setError("");
-    try {
-      const res = await fetch(`/api/surveys/${id}/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(authPayload()),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "완료 실패");
-      setSelectedActivityNames(data.selectedActivities ?? selectedActivityNames);
-      setStep("done");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "오류");
-    } finally {
-      setCompleting(false);
+      setSubmitting(false);
     }
   };
 
@@ -175,9 +229,8 @@ export default function StudentSurveyPage() {
     );
   }
 
-  const requiredCount =
-    survey.selectionMode === "EXACT" ? survey.selectionCount : null;
-  const selectedCount = selectedActivityNames.length;
+  const pendingCount = pendingIds.length;
+  const displaySelectedCount = registeredCount + pendingCount;
 
   if (step === "done") {
     return (
@@ -187,12 +240,12 @@ export default function StudentSurveyPage() {
         </div>
         <h1 className="text-xl font-bold">신청이 완료되었습니다</h1>
         <p className="mt-2 text-slate-600">
-          선택한 프로그램 ({selectedActivityNames.length}개)
+          선택한 프로그램 ({registeredActivities.length}개)
         </p>
         <ul className="mt-3 space-y-1 text-sm text-slate-700">
-          {selectedActivityNames.map((name) => (
-            <li key={name}>
-              <strong>{name}</strong>
+          {registeredActivities.map((a) => (
+            <li key={a.id}>
+              <strong>{a.name}</strong>
             </li>
           ))}
         </ul>
@@ -201,7 +254,7 @@ export default function StudentSurveyPage() {
   }
 
   return (
-    <main className="mx-auto max-w-lg px-4 py-8 pb-20">
+    <main className="mx-auto max-w-lg px-4 py-8 pb-28">
       <h1 className="text-xl font-bold">{survey.title}</h1>
 
       {survey.phase === "before" && (
@@ -274,33 +327,61 @@ export default function StudentSurveyPage() {
         <>
           {survey.selectionMode === "EXACT" ? (
             <p className="mt-2 text-sm text-slate-500">
-              프로그램을 <strong>{requiredCount}개</strong> 선택해야 합니다. (
-              {selectedCount}/{requiredCount})
+              프로그램을 <strong>{requiredCount}개</strong> 선택한 뒤 맨 아래
+              「신청하기」를 눌러 주세요. (
+              {registeredCount > 0
+                ? `신청 완료 ${registeredCount}개 · 선택 중 ${pendingCount}개`
+                : `선택 ${displaySelectedCount}/${requiredCount}`}
+              )
             </p>
           ) : (
             <p className="mt-2 text-sm text-slate-500">
-              원하는 프로그램을 선택한 뒤 「선택 완료」를 눌러 주세요.
+              원하는 프로그램을 선택한 뒤 맨 아래 「신청하기」를 눌러 주세요.
+              {registeredCount > 0 && ` (이미 신청 ${registeredCount}개)`}
             </p>
           )}
 
-          {selectedActivityNames.length > 0 && (
+          {(registeredActivities.length > 0 || pendingIds.length > 0) && (
             <Card className="mt-4 border-indigo-200 bg-indigo-50">
-              <p className="text-sm font-medium text-indigo-900">선택한 프로그램</p>
+              <p className="text-sm font-medium text-indigo-900">
+                선택·신청 현황
+              </p>
               <ul className="mt-2 space-y-1 text-sm text-indigo-800">
-                {selectedActivityNames.map((name) => (
-                  <li key={name}>• {name}</li>
+                {registeredActivities.map((a) => (
+                  <li key={a.id}>✓ {a.name} (신청됨)</li>
                 ))}
+                {pendingIds.map((pid) => {
+                  const act = survey.activities.find((a) => a.id === pid);
+                  return act ? (
+                    <li key={pid}>• {act.name} (선택 중)</li>
+                  ) : null;
+                })}
               </ul>
             </Card>
           )}
 
           <div className="mt-4 space-y-3">
             {mergedActivities().map((a) => {
-              const alreadySelected = selectedActivityIds.includes(a.id);
+              const isRegistered = registeredIds.includes(a.id);
+              const isPending = pendingIds.includes(a.id);
+              const atLimit =
+                requiredCount !== null &&
+                !isPending &&
+                !isRegistered &&
+                registeredCount + pendingIds.length >= requiredCount!;
+
               return (
                 <Card
                   key={a.id}
-                  className={a.isFull && !alreadySelected ? "opacity-60" : ""}
+                  className={
+                    isPending
+                      ? "border-indigo-400 ring-1 ring-indigo-200"
+                      : isRegistered
+                        ? "border-emerald-200 bg-emerald-50/50"
+                        : a.isFull
+                          ? "opacity-60"
+                          : ""
+                  }
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -311,8 +392,10 @@ export default function StudentSurveyPage() {
                         </p>
                       )}
                     </div>
-                    {alreadySelected ? (
-                      <Badge tone="success">선택됨</Badge>
+                    {isRegistered ? (
+                      <Badge tone="success">신청됨</Badge>
+                    ) : isPending ? (
+                      <Badge tone="warning">선택됨</Badge>
                     ) : a.isFull ? (
                       <Badge tone="danger">마감</Badge>
                     ) : (
@@ -324,21 +407,18 @@ export default function StudentSurveyPage() {
                   </p>
                   <Button
                     className="mt-3 w-full"
-                    disabled={
-                      alreadySelected ||
-                      (a.isFull && !alreadySelected) ||
-                      submitting !== null ||
-                      completing
+                    disabled={isRegistered || submitting || atLimit}
+                    variant={
+                      isPending ? "secondary" : isRegistered ? "ghost" : "primary"
                     }
-                    variant={alreadySelected ? "secondary" : "primary"}
-                    onClick={() => !alreadySelected && register(a.id)}
+                    onClick={() => toggleActivity(a.id)}
                   >
-                    {alreadySelected
-                      ? "선택 완료"
-                      : submitting === a.id
-                        ? "신청 중…"
-                        : a.isFull
-                          ? "마감됨"
+                    {isRegistered
+                      ? "신청 완료"
+                      : isPending
+                        ? "선택 해제"
+                        : atLimit
+                          ? "선택 한도 도달"
                           : "선택하기"}
                   </Button>
                 </Card>
@@ -346,25 +426,35 @@ export default function StudentSurveyPage() {
             })}
           </div>
 
-          {survey.selectionMode === "UNLIMITED" && (
-            <Button
-              className="mt-4 w-full"
-              disabled={
-                completing ||
-                submitting !== null ||
-                selectedActivityNames.length === 0
-              }
-              onClick={finishSelection}
-            >
-              {completing ? "완료 처리 중…" : "선택 완료"}
-            </Button>
-          )}
-
           {error && (
             <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </p>
           )}
+
+          <div className="fixed right-0 bottom-0 left-0 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur">
+            <div className="mx-auto max-w-lg">
+              {requiredCount !== null && remainingToPick !== null && (
+                <p className="mb-2 text-center text-xs text-slate-500">
+                  {registeredCount > 0
+                    ? `아직 ${remainingToPick}개 프로그램을 더 선택·신청해야 합니다.`
+                    : `총 ${requiredCount}개를 선택한 뒤 신청해 주세요.`}
+                </p>
+              )}
+              <Button
+                className="w-full"
+                disabled={!canSubmit() || submitting}
+                onClick={submitRegistration}
+              >
+                {submitting
+                  ? "신청 중…"
+                  : requiredCount !== null
+                    ? `신청하기 (${registeredCount + pendingCount}/${requiredCount})`
+                    : `신청하기 (${pendingCount}개 선택)`}
+              </Button>
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={() => setStep("auth")}
