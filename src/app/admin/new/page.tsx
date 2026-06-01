@@ -34,10 +34,10 @@ export default function NewSurveyPage() {
   const [selectionMode, setSelectionMode] = useState<"EXACT" | "UNLIMITED">("EXACT");
   const [selectionCount, setSelectionCount] = useState("1");
   const [startTime, setStartTime] = useState(() =>
-    toLocalInputValue(new Date(Date.now() + 3600000)),
+    toLocalInputValue(new Date()),
   );
   const [endTime, setEndTime] = useState(() =>
-    toLocalInputValue(new Date(Date.now() + 7200000)),
+    toLocalInputValue(new Date(Date.now() + 3600000)),
   );
   const [activities, setActivities] = useState<ActivityDraft[]>([
     { name: "", description: "", maxCapacity: 10 },
@@ -240,7 +240,7 @@ export default function NewSurveyPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8 pb-20">
+    <main className="mx-auto max-w-2xl px-4 py-8 pb-20" lang="ko">
       <Link href="/" className="text-sm text-indigo-600 hover:underline">
         ← 홈
       </Link>
@@ -438,6 +438,8 @@ export default function NewSurveyPage() {
                       onChange={(e) =>
                         updateActivity(i, { name: e.target.value })
                       }
+                      lang="ko"
+                      spellCheck
                       required
                     />
                   </div>
@@ -449,6 +451,8 @@ export default function NewSurveyPage() {
                       onChange={(e) =>
                         updateActivity(i, { description: e.target.value })
                       }
+                      lang="ko"
+                      spellCheck
                     />
                   </div>
                   <div>

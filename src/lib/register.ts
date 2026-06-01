@@ -368,6 +368,54 @@ export async function registerParticipantsBatch(
   };
 }
 
+export async function getSelectionStatus(
+  surveyId: string,
+  payload: AuthPayload,
+) {
+  const survey = await prisma.survey.findUnique({ where: { id: surveyId } });
+  if (!survey) {
+    throw new RegisterError("설문을 찾을 수 없습니다.", "NOT_FOUND");
+  }
+
+  const { normalizedAuth, studentName } = resolveAuth(survey, payload);
+
+  if (!normalizedAuth) {
+    throw new RegisterError("인증 정보를 입력해 주세요.", "INVALID_AUTH");
+  }
+  if (survey.authType === AuthType.STUDENT_ID && !studentName) {
+    throw new RegisterError("이름을 입력해 주세요.", "INVALID_AUTH");
+  }
+  if (survey.authType === AuthType.CODE) {
+    const code = await prisma.accessCode.findFirst({
+      where: { surveyId, code: normalizedAuth },
+    });
+    if (!code) {
+      throw new RegisterError("유효하지 않은 코드입니다.", "INVALID_AUTH");
+    }
+  }
+
+  const participants = await getParticipantsForAuth(
+    surveyId,
+    survey.authType,
+    normalizedAuth,
+  );
+  const isComplete = await isAuthCompleted(survey, normalizedAuth);
+
+  return {
+    selectedCount: participants.length,
+    selectionRequired:
+      survey.selectionMode === SelectionMode.EXACT
+        ? survey.selectionCount
+        : null,
+    selectionMode: survey.selectionMode,
+    isComplete,
+    selectedActivities: participants.map((p) => ({
+      id: p.activityId,
+      name: p.activity.name,
+    })),
+  };
+}
+
 export async function registerParticipant(
   surveyId: string,
   activityId: string,

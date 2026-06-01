@@ -83,7 +83,7 @@ export default function StudentSurveyPage() {
       ? { authValue }
       : { studentId: authValue, studentName };
 
-  const handleAuth = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     const missingCode = survey?.authType === "CODE" && !authValue.trim();
     const missingStudentInfo =
@@ -107,9 +107,25 @@ export default function StudentSurveyPage() {
       return;
     }
     setError("");
-    setPendingIds([]);
-    setRegisteredActivities([]);
-    setStep("select");
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/surveys/${id}/selection-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(authPayload()),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "인증에 실패했습니다.");
+
+      const selected = (data.selectedActivities ?? []) as RegisteredActivity[];
+      setRegisteredActivities(selected);
+      setPendingIds([]);
+      setStep(data.isComplete ? "done" : "select");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "인증 처리 중 오류가 발생했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const registeredIds = registeredActivities.map((a) => a.id);
@@ -315,9 +331,9 @@ export default function StudentSurveyPage() {
             <Button
               type="submit"
               className="mt-4 w-full"
-              disabled={survey.phase === "before"}
+              disabled={survey.phase === "before" || submitting}
             >
-              다음
+              {submitting ? "확인 중…" : "다음"}
             </Button>
           </form>
         </Card>
